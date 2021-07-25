@@ -1,0 +1,73 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// 定义表
+type User struct {
+	ID           uint
+	Name         string  `gorm:"column:name"`
+	Email        *string // 也可以解决空值问题
+	Age          uint8
+	Birthday     *time.Time
+	MemberNumber sql.NullString
+	ActivatedAt  sql.NullTime
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+func main() {
+	// 参考 https://github.com/go-sql-driver/mysql#dsn-data-source-name 获取详情
+	dsn := "root:root@tcp(127.0.0.1:3306)/gormtest?charset=utf8mb4&parseTime=True&loc=Local"
+
+	// 设置全局的logger。打印每次的sql语句
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             time.Second, // Slow SQL threshold
+			LogLevel:                  logger.Info, // Log level
+			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			Colorful:                  true,        // Disable color
+		},
+	)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// 通过where查询
+	var user User
+	db.Where("name = ?", "an").First(&user)  // 通过列字段
+	db.Where(&User{Name: "an"}).First(&user) // 通过结构体
+
+	// 获取全部匹配的值
+	var users []User
+	db.Where(&User{Name: "an"}).Find(&users)
+	for _, user := range users {
+		fmt.Println(user.ID)
+	}
+
+	// map做法 通过列字段
+	db.Where(map[string]interface{}{"name": "an"}).Find(&users)
+	for _, user := range users {
+		fmt.Println(user.ID)
+	}
+
+	// 零值查询? map可以查询零值
+
+	// 判断查询
+	db.Where("name <> ?", "an").First(&user)
+	// or查询
+	db.Where("name <> ?", "an").Or("age <> ?", 18).First(&user)
+}
